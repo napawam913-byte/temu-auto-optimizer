@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "description": "Sensitive word configuration for Temu Auto Optimizer title generation. Keep terms in lowercase where possible. Matching should be case-insensitive.",
+  "replacement_strategy": {
+    "default_action": "reject_and_regenerate",
+    "max_retry": 5,
+    "allowed_title_length_delta": 5
+  },
+  "categories": {
+    "absolute_claims": [
+      "best",
+      "no.1",
+      "number one",
+      "top rated",
+      "perfect",
+      "ultimate",
+      "guaranteed",
+      "100% guaranteed",
+      "forever",
+      "permanent"
+    ],
+    "price_or_promo_claims": [
+      "free",
+      "lowest price",
+      "cheap",
+      "clearance",
+      "discount",
+      "sale",
+      "coupon",
+      "giveaway"
+    ],
+    "medical_or_health_claims": [
+      "cure",
+      "treat",
+      "treatment",
+      "heal",
+      "healing",
+      "anti cancer",
+      "cancer",
+      "diabetes",
+      "blood pressure",
+      "pain relief",
+      "medical",
+      "clinical",
+      "fda",
+      "approved by fda"
+    ],
+    "authenticity_or_certification_claims": [
+      "authentic",
+      "genuine",
+      "official",
+      "certified",
+      "licensed",
+      "original brand",
+      "factory authorized"
+    ],
+    "brand_or_ip_terms": [
+      "nike",
+      "adidas",
+      "puma",
+      "apple",
+      "iphone",
+      "ipad",
+      "disney",
+      "marvel",
+      "pokemon",
+      "hello kitty",
+      "lego",
+      "barbie",
+      "harry potter",
+      "star wars",
+      "taylor swift"
+    ],
+    "regulated_or_restricted": [
+      "weapon",
+      "gun",
+      "knife",
+      "explosive",
+      "drug",
+      "cbd",
+      "thc",
+      "nicotine",
+      "tobacco",
+      "alcohol"
+    ],
+    "adult_or_sensitive": [
+      "sexy",
+      "nude",
+      "erotic",
+      "porn",
+      "fetish"
+    ]
+  },
+  "allowlist": [
+    "free size",
+    "wireless"
+  ]
+}
