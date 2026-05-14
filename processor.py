@@ -43,6 +43,7 @@ DXM_COLUMNS = [
     "识别码类型",
     "识别码",
     "站外产品链接",
+    "真实详情页URL",
     "*轮播图",
     "*产品素材图",
     "外包装形状",
@@ -51,6 +52,8 @@ DXM_COLUMNS = [
     "建议售价（USD）",
     "库存",
     "发货时效（天）",
+    "是否无属性",
+    "变体数量",
 ]
 
 CLOTHING_KEYWORDS = ("服装", "女装", "男装", "童装", "鞋", "靴", "尺码", "clothing", "shoes", "boots")
@@ -174,6 +177,9 @@ class ProcessingConfig:
     max_concurrent_scrapes: int = 3
     scraper_headless: bool = True
     scraper_proxy: str = ""
+    external_scraper_dir: str = ""
+    external_scraper_command: str = "npm run scrape -- --input {input} --output {output}"
+    external_scraper_timeout_seconds: int = 180
     download_images: bool = False
     image_tune_count: int = 2
     image_tune_prompt: str = DEFAULT_IMAGE_TUNE_PROMPT
@@ -402,20 +408,23 @@ class TemuProcessor:
             proxy=self.config.scraper_proxy,
             retry_count=max(0, int(self.config.retry_count or 0)),
             max_images=12,
+            external_scraper_dir=self.config.external_scraper_dir,
+            external_scraper_command=self.config.external_scraper_command,
+            external_scraper_timeout_seconds=max(10, int(self.config.external_scraper_timeout_seconds or 180)),
         )
         self.log(f"开始商品详情爬虫补全：{link_column}，并发 {scraper_config.max_concurrent}")
 
         async with TemuScraper(scraper_config, log=self.log) as scraper:
-            tasks = []
+            inputs: list[tuple[int, str]] = []
             for row_index, value in enriched[link_column].fillna("").items():
                 url = str(value).strip()
-                if url.startswith(("http://", "https://")):
-                    tasks.append((row_index, url, asyncio.create_task(scraper.scrape_product(url))))
+                if url:
+                    inputs.append((row_index, url))
 
-            total = len(tasks)
-            for current, (row_index, url, task) in enumerate(tasks, start=1):
+            total = len(inputs)
+            results = await scraper.scrape_products([url for _, url in inputs])
+            for current, ((row_index, url), data) in enumerate(zip(inputs, results), start=1):
                 try:
-                    data = await task
                     if data.get("ok"):
                         self._merge_scraped_data(enriched, row_index, data)
                         self.log(f"爬虫补全成功 {current}/{total}：{url}")
@@ -439,6 +448,12 @@ class TemuProcessor:
                 for column_index, header in enumerate(headers, start=1):
                     if header:
                         worksheet.cell(excel_row, column_index).value = item.get(str(header), "")
+            for extra_header in ("真实详情页URL", "是否无属性", "变体数量"):
+                if extra_header not in headers:
+                    column_index = worksheet.max_column + 1
+                    worksheet.cell(1, column_index).value = extra_header
+                    for excel_row, item in enumerate(rows, start=2):
+                        worksheet.cell(excel_row, column_index).value = item.get(extra_header, "")
             workbook.save(output_file)
             return
 
@@ -454,6 +469,7 @@ class TemuProcessor:
         image_values: dict[str, str],
     ) -> dict[str, object]:
         product_link = self._first(row, ["商品链接", "站外产品链接", "product_url"])
+        real_detail_url = self._first(row, ["真实详情页URL", "real_detail_url", "productUrl"])
         price = self._first(row, ["*申报价格\n(店铺币种)", "美元价格($)", "价格", "售价", "price"]) or self.config.default_price
         suggestion_price = self._first(row, ["建议售价（USD）", "美元价格($)", "price"]) or price
         preview = image_values.get("preview", self._first(row, ["预览图", "商品主图", "preview_image"]))
@@ -481,6 +497,7 @@ class TemuProcessor:
             "识别码类型": self._first(row, ["识别码类型"]),
             "识别码": self._first(row, ["识别码"]),
             "站外产品链接": product_link,
+            "真实详情页URL": real_detail_url,
             "*轮播图": carousel or preview,
             "*产品素材图": material or preview,
             "外包装形状": self._first(row, ["外包装形状"]) or self.config.default_package_shape,
@@ -489,6 +506,8 @@ class TemuProcessor:
             "建议售价（USD）": suggestion_price,
             "库存": self._first(row, ["库存", "stock"]) or self.config.default_stock,
             "发货时效（天）": self._first(row, ["发货时效（天）", "发货时效"]) or self.config.default_ship_days,
+            "是否无属性": self._first(row, ["是否无属性", "is_no_attribute"]) or "未知",
+            "变体数量": self._first(row, ["变体数量", "variant_count"]) or "",
         }
 
     def _append_description_images(self, description: str, image_values: dict[str, str]) -> str:
@@ -610,6 +629,7 @@ class TemuProcessor:
     def _merge_scraped_data(self, frame: pd.DataFrame, row_index: int, data: dict[str, object]) -> None:
         title = str(data.get("title") or "").strip()
         description = str(data.get("description") or "").strip()
+        images = [str(value).strip() for value in data.get("images", []) if str(value).strip()]
         specs = data.get("specs") if isinstance(data.get("specs"), dict) else {}
 
         if title:
@@ -618,9 +638,25 @@ class TemuProcessor:
         if description:
             self._fill_if_empty(frame, row_index, "产品描述", description)
             self._set_value(frame, row_index, "爬虫产品描述", description)
+        if images:
+            joined_images = "\n".join(images[:MAX_CAROUSEL_IMAGES])
+            self._fill_if_empty(frame, row_index, "商品轮播图", joined_images)
+            self._fill_if_empty(frame, row_index, "*轮播图", joined_images)
+            self._fill_if_empty(frame, row_index, "商品主图", images[0])
+            self._fill_if_empty(frame, row_index, "预览图", images[0])
+            self._fill_if_empty(frame, row_index, "*产品素材图", joined_images)
         if specs:
             self._set_value(frame, row_index, "爬虫规格参数", specs_to_json(specs))
             self._fill_variant_from_specs(frame, row_index, specs)
+
+        self._set_value(frame, row_index, "真实详情页URL", str(data.get("real_detail_url") or data.get("url") or ""))
+        if "is_no_attribute" in data:
+            self._set_value(frame, row_index, "是否无属性", "是" if data.get("is_no_attribute") else "否")
+        if data.get("variant_count") is not None:
+            self._set_value(frame, row_index, "变体数量", data.get("variant_count"))
+        detected_attributes = data.get("detected_attributes")
+        if detected_attributes:
+            self._set_value(frame, row_index, "检测到的变种属性", ", ".join(str(value) for value in detected_attributes))
 
         self._fill_if_empty(frame, row_index, "商品ID", str(data.get("product_id") or ""))
         self._fill_if_empty(frame, row_index, "SKU", str(data.get("sku") or ""))

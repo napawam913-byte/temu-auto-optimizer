@@ -144,6 +144,10 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
                     "height_cm": 5,
                     "product_id": "123456789",
                     "sku": "SCRAPED-SKU",
+                    "real_detail_url": "https://www.temu.com/goods.html?_bg_fs=1&goods_id=123456789",
+                    "is_no_attribute": False,
+                    "variant_count": 2,
+                    "detected_attributes": ["颜色", "尺寸"],
                 },
             )
             return enriched
@@ -155,8 +159,7 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
     assert frame.loc[0, "*英文标题"] == "Scraped English Product Title"
     assert "Scraped detailed product description." not in frame.loc[0, "产品描述"]
     assert frame.loc[0, "产品描述"].count("<img src=") == 2
-    assert "https://source.example.com/a.jpg" in frame.loc[0, "*轮播图"]
-    assert "https://img.example.com/1.jpg" not in frame.loc[0, "*轮播图"]
+    assert "https://img.example.com/1.jpg" in frame.loc[0, "*轮播图"]
     assert frame.loc[0, "*变种属性名称一"] == "颜色"
     assert frame.loc[0, "*变种属性值一"] == "Blue"
     assert frame.loc[0, "变种属性名称二"] == "尺寸"
@@ -164,6 +167,9 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
     assert isna(frame.loc[0, "SKU货号"])
     assert isna(frame.loc[0, "产品货号"])
     assert frame.loc[0, "*重量（g）"] == 250
+    assert frame.loc[0, "真实详情页URL"] == "https://www.temu.com/goods.html?_bg_fs=1&goods_id=123456789"
+    assert frame.loc[0, "是否无属性"] == "否"
+    assert frame.loc[0, "变体数量"] == 2
 
 
 def test_processor_appends_four_unique_images_to_description(tmp_path: Path) -> None:
