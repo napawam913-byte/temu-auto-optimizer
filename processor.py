@@ -606,7 +606,6 @@ class TemuProcessor:
     def _merge_scraped_data(self, frame: pd.DataFrame, row_index: int, data: dict[str, object]) -> None:
         title = str(data.get("title") or "").strip()
         description = str(data.get("description") or "").strip()
-        images = [str(value).strip() for value in data.get("images", []) if str(value).strip()]
         specs = data.get("specs") if isinstance(data.get("specs"), dict) else {}
 
         if title:
@@ -615,13 +614,6 @@ class TemuProcessor:
         if description:
             self._fill_if_empty(frame, row_index, "产品描述", description)
             self._set_value(frame, row_index, "爬虫产品描述", description)
-        if images:
-            joined_images = "\n".join(images[:12])
-            self._fill_if_empty(frame, row_index, "商品轮播图", joined_images)
-            self._fill_if_empty(frame, row_index, "*轮播图", joined_images)
-            self._fill_if_empty(frame, row_index, "商品主图", images[0])
-            self._fill_if_empty(frame, row_index, "预览图", images[0])
-            self._fill_if_empty(frame, row_index, "*产品素材图", joined_images)
         if specs:
             self._set_value(frame, row_index, "爬虫规格参数", specs_to_json(specs))
             self._fill_variant_from_specs(frame, row_index, specs)
@@ -666,14 +658,14 @@ class TemuProcessor:
     @staticmethod
     def _set_value(frame: pd.DataFrame, row_index: int, column: str, value: object) -> None:
         if column not in frame.columns:
-            frame[column] = ""
+            frame[column] = pd.Series([""] * len(frame), dtype="object")
         frame.at[row_index, column] = value
 
     def _fill_if_empty(self, frame: pd.DataFrame, row_index: int, column: str, value: object) -> None:
         if value is None or str(value).strip() == "":
             return
         if column not in frame.columns:
-            frame[column] = ""
+            frame[column] = pd.Series([""] * len(frame), dtype="object")
         current = frame.at[row_index, column]
         if pd.isna(current) or str(current).strip() == "":
             frame.at[row_index, column] = value

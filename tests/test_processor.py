@@ -119,7 +119,11 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
     source = tmp_path / "batch.xlsx"
     pd.DataFrame(
         [
-            {"商品标题": "Fallback title", "商品链接": "https://www.temu.com/product.html?goods_id=123456789"},
+            {
+                "商品标题": "Fallback title",
+                "商品链接": "https://www.temu.com/product.html?goods_id=123456789",
+                "商品轮播图": "https://source.example.com/a.jpg\nhttps://source.example.com/b.jpg",
+            },
         ]
     ).to_excel(source, index=False)
 
@@ -151,7 +155,8 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
     assert frame.loc[0, "*英文标题"] == "Scraped English Product Title"
     assert "Scraped detailed product description." not in frame.loc[0, "产品描述"]
     assert frame.loc[0, "产品描述"].count("<img src=") == 2
-    assert "https://img.example.com/1.jpg" in frame.loc[0, "*轮播图"]
+    assert "https://source.example.com/a.jpg" in frame.loc[0, "*轮播图"]
+    assert "https://img.example.com/1.jpg" not in frame.loc[0, "*轮播图"]
     assert frame.loc[0, "*变种属性名称一"] == "颜色"
     assert frame.loc[0, "*变种属性值一"] == "Blue"
     assert frame.loc[0, "变种属性名称二"] == "尺寸"
