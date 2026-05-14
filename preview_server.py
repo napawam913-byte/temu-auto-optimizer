@@ -625,7 +625,50 @@ def _update_carousel_cell(excel_file: Path, row_index: int, value: str) -> None:
     try:
         workbook.save(excel_file)
     except PermissionError as exc:
-        raise ImageTuneError(f"无法写入结果 Excel，请先关闭正在打开的文件：{excel_file}") from exc
+        if _update_open_spreadsheet_app(excel_file, row_index + 2, column_index, value):
+            return
+        raise ImageTuneError(
+            "结果 Excel 正在被占用，且无法通过已打开的 Excel/WPS 写入。"
+            f"请关闭文件后重试，或安装 pywin32 后用 Microsoft Excel 打开：{excel_file}"
+        ) from exc
+    finally:
+        workbook.close()
+
+
+def _update_open_spreadsheet_app(excel_file: Path, excel_row: int, column_index: int, value: str) -> bool:
+    """Write through an already-open Excel/WPS workbook when Windows locks the xlsx file."""
+
+    try:
+        import win32com.client  # type: ignore
+    except Exception:
+        return False
+
+    target = str(excel_file.resolve()).lower()
+    for app_name in ("Excel.Application", "Ket.Application"):
+        try:
+            app = win32com.client.GetActiveObject(app_name)
+        except Exception:
+            continue
+        try:
+            workbooks = app.Workbooks
+            for index in range(1, int(workbooks.Count) + 1):
+                workbook = workbooks.Item(index)
+                try:
+                    full_name = str(workbook.FullName).lower()
+                except Exception:
+                    continue
+                if full_name != target:
+                    continue
+                try:
+                    worksheet = workbook.Worksheets("导入模板")
+                except Exception:
+                    worksheet = workbook.ActiveSheet
+                worksheet.Cells(excel_row, column_index).Value = value
+                workbook.Save()
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def _first(row, names: list[str]) -> str:
