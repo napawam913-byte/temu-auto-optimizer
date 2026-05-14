@@ -8,6 +8,7 @@ Temu 半托管自动上架助手，Tkinter 桌面版。支持 Excel 拆分、批
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+playwright install chromium
 python main.py
 ```
 
@@ -24,6 +25,7 @@ pyinstaller --noconfirm --onefile --windowed --name TemuAutoOptimizer main.py
 ## 关键说明
 
 - 支持云启数据导出的特殊文件：即使扩展名是 `.csv`，只要内容实际是 Excel，也会自动识别读取。
+- 自动上架页可启用 `商品详情爬虫补全`：程序会在标题优化前根据商品链接尝试抓取 Temu 详情页，补充英文标题、描述、多图、规格、重量和尺寸；爬取失败会记录日志并继续原流程。
 - 自动上架页可以选择最终上架模板，例如 `D:\Downloads\import_created_product_popTemu.xlsx`，程序会复制模板并填充 `导入模板` 工作表。
 - 自动上架页可以指定输出目录，并自定义结果 Excel 文件名；程序会在输出目录下创建 `temu_output_时间戳` 子文件夹，避免覆盖旧批次。
 - 拆分工具页可以指定拆分输出目录；程序会在该目录下创建 `split_时间戳` 子文件夹，并生成拆分 Excel 和 `split_files.zip`。

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import re
@@ -20,6 +21,7 @@ from openpyxl import load_workbook
 from PIL import Image, ImageEnhance
 
 from llm_optimizer import LLMConfig, LLMOptimizer
+from temu_scraper import ScraperConfig, TemuScraper, specs_to_json
 
 
 DXM_COLUMNS = [
@@ -78,6 +80,10 @@ class ProcessingConfig:
     filter_clothing: bool = True
     deduplicate: bool = True
     dedupe_field: str = "title"
+    enable_scraper: bool = True
+    max_concurrent_scrapes: int = 3
+    scraper_headless: bool = True
+    scraper_proxy: str = ""
     download_images: bool = False
     image_tune_count: int = 2
     image_tune_prompt: str = DEFAULT_IMAGE_TUNE_PROMPT
@@ -248,7 +254,8 @@ class TemuProcessor:
                     sensitive_words_file=self._sensitive_words_file(),
                 )
                 chinese_title = self.optimizer.translate_title_to_chinese(english_title, source_title, category)
-                description = self.optimizer.generate_description(source_title, english_title, category)
+                source_description = self._first(row, ["产品描述", "商品描述", "详细产品描述", "爬虫产品描述", "description"])
+                description = source_description or self.optimizer.generate_description(source_title, english_title, category)
                 output_sku = self._listing_sku(sku, product_id, english_title, index)
                 image_values = self._process_images(row, image_dir, output_sku or f"item_{index}")
                 description = self._append_description_images(description, image_values)
@@ -267,8 +274,69 @@ class TemuProcessor:
         for file_path in files:
             self.log(f"读取文件：{file_path}")
             frame = read_source_table(file_path)
+            if self.config.enable_scraper:
+                frame = self._run_scraper_enrichment(frame)
             rows.extend(frame.fillna("").to_dict("records"))
         return rows
+
+    def _run_scraper_enrichment(self, frame: pd.DataFrame) -> pd.DataFrame:
+        link_column = self._find_product_link_column(frame)
+        if not link_column:
+            self.log("未找到商品链接列，跳过详情爬虫补全")
+            return frame
+        urls = [str(value).strip() for value in frame[link_column].fillna("").tolist()]
+        if not any(url.startswith(("http://", "https://")) for url in urls):
+            self.log("商品链接列为空，跳过详情爬虫补全")
+            return frame
+        try:
+            return asyncio.run(self.enrich_products_with_scraper(frame))
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(self.enrich_products_with_scraper(frame))
+            finally:
+                loop.close()
+        except Exception as exc:
+            self.log(f"详情爬虫补全失败，继续执行原流程：{exc}")
+            return frame
+
+    async def enrich_products_with_scraper(self, df: pd.DataFrame) -> pd.DataFrame:
+        """数据补全主方法。爬取失败不阻断主处理流程。"""
+
+        link_column = self._find_product_link_column(df)
+        if not link_column:
+            return df
+
+        enriched = df.copy()
+        scraper_config = ScraperConfig(
+            max_concurrent=max(1, int(self.config.max_concurrent_scrapes or 3)),
+            headless=bool(self.config.scraper_headless),
+            proxy=self.config.scraper_proxy,
+            retry_count=max(0, int(self.config.retry_count or 0)),
+            max_images=12,
+        )
+        self.log(f"开始商品详情爬虫补全：{link_column}，并发 {scraper_config.max_concurrent}")
+
+        async with TemuScraper(scraper_config, log=self.log) as scraper:
+            tasks = []
+            for row_index, value in enriched[link_column].fillna("").items():
+                url = str(value).strip()
+                if url.startswith(("http://", "https://")):
+                    tasks.append((row_index, url, asyncio.create_task(scraper.scrape_product(url))))
+
+            total = len(tasks)
+            for current, (row_index, url, task) in enumerate(tasks, start=1):
+                try:
+                    data = await task
+                    if data.get("ok"):
+                        self._merge_scraped_data(enriched, row_index, data)
+                        self.log(f"爬虫补全成功 {current}/{total}：{url}")
+                    else:
+                        self.log(f"爬虫补全失败 {current}/{total}：{url} | {data.get('error', '')}")
+                except Exception as exc:
+                    self.log(f"爬虫补全异常 {current}/{total}：{url} | {exc}")
+
+        return enriched
 
     def _write_output(self, rows: list[dict[str, object]], output_file: Path) -> None:
         template = Path(self.config.template_file) if self.config.template_file else None
@@ -426,6 +494,107 @@ class TemuProcessor:
         if target != path and path.exists():
             path.unlink(missing_ok=True)
         return str(target)
+
+    @staticmethod
+    def _find_product_link_column(frame: pd.DataFrame) -> str:
+        candidates = [
+            "商品链接",
+            "站外产品链接",
+            "产品链接",
+            "详情页",
+            "详情页链接",
+            "product_url",
+            "Product URL",
+            "url",
+            "URL",
+            "link",
+            "Link",
+        ]
+        for name in candidates:
+            if name in frame.columns:
+                return name
+        for column in frame.columns:
+            text = str(column)
+            lowered = text.lower()
+            if "url" in lowered or "link" in lowered or "链接" in text:
+                return text
+        return ""
+
+    def _merge_scraped_data(self, frame: pd.DataFrame, row_index: int, data: dict[str, object]) -> None:
+        title = str(data.get("title") or "").strip()
+        description = str(data.get("description") or "").strip()
+        images = [str(value).strip() for value in data.get("images", []) if str(value).strip()]
+        specs = data.get("specs") if isinstance(data.get("specs"), dict) else {}
+
+        if title:
+            self._fill_if_empty(frame, row_index, "商品标题（英文）", title)
+            self._set_value(frame, row_index, "爬虫商品标题", title)
+        if description:
+            self._fill_if_empty(frame, row_index, "产品描述", description)
+            self._set_value(frame, row_index, "爬虫产品描述", description)
+        if images:
+            joined_images = "\n".join(images[:12])
+            self._fill_if_empty(frame, row_index, "商品轮播图", joined_images)
+            self._fill_if_empty(frame, row_index, "*轮播图", joined_images)
+            self._fill_if_empty(frame, row_index, "商品主图", images[0])
+            self._fill_if_empty(frame, row_index, "预览图", images[0])
+            self._fill_if_empty(frame, row_index, "*产品素材图", joined_images)
+        if specs:
+            self._set_value(frame, row_index, "爬虫规格参数", specs_to_json(specs))
+            self._fill_variant_from_specs(frame, row_index, specs)
+
+        self._fill_if_empty(frame, row_index, "商品ID", str(data.get("product_id") or ""))
+        self._fill_if_empty(frame, row_index, "SKU", str(data.get("sku") or ""))
+        self._fill_numeric_if_present(frame, row_index, "重量(g)", data.get("weight_g"))
+        self._fill_numeric_if_present(frame, row_index, "长(cm)", data.get("length_cm"))
+        self._fill_numeric_if_present(frame, row_index, "宽(cm)", data.get("width_cm"))
+        self._fill_numeric_if_present(frame, row_index, "高(cm)", data.get("height_cm"))
+
+    def _fill_variant_from_specs(self, frame: pd.DataFrame, row_index: int, specs: dict[str, object]) -> None:
+        lowered = {str(key).strip().lower(): str(value).strip() for key, value in specs.items() if str(value).strip()}
+        color = self._first_matching_spec(lowered, ["color", "colour", "颜色", "颜色分类"])
+        size = self._first_matching_spec(lowered, ["size", "尺寸", "尺码", "规格"])
+        material = self._first_matching_spec(lowered, ["material", "材质", "fabric", "composition"])
+
+        if color:
+            self._fill_if_empty(frame, row_index, "颜色", color)
+            self._fill_if_empty(frame, row_index, "变种属性名称一", "颜色")
+            self._fill_if_empty(frame, row_index, "变种属性值一", color)
+        elif size:
+            self._fill_if_empty(frame, row_index, "规格", size)
+            self._fill_if_empty(frame, row_index, "变种属性名称一", "规格")
+            self._fill_if_empty(frame, row_index, "变种属性值一", size)
+        if material:
+            self._fill_if_empty(frame, row_index, "材质", material)
+
+    @staticmethod
+    def _first_matching_spec(specs: dict[str, str], keys: list[str]) -> str:
+        for key in keys:
+            key_lower = key.lower()
+            for spec_key, value in specs.items():
+                if key_lower == spec_key or key_lower in spec_key:
+                    return value
+        return ""
+
+    @staticmethod
+    def _set_value(frame: pd.DataFrame, row_index: int, column: str, value: object) -> None:
+        if column not in frame.columns:
+            frame[column] = ""
+        frame.at[row_index, column] = value
+
+    def _fill_if_empty(self, frame: pd.DataFrame, row_index: int, column: str, value: object) -> None:
+        if value is None or str(value).strip() == "":
+            return
+        if column not in frame.columns:
+            frame[column] = ""
+        current = frame.at[row_index, column]
+        if pd.isna(current) or str(current).strip() == "":
+            frame.at[row_index, column] = value
+
+    def _fill_numeric_if_present(self, frame: pd.DataFrame, row_index: int, column: str, value: object) -> None:
+        if value is None or str(value).strip() == "":
+            return
+        self._fill_if_empty(frame, row_index, column, value)
 
     def _emit(self, current: int, total: int, message: str) -> None:
         self.log(message)

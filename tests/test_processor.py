@@ -112,6 +112,47 @@ def test_processor_preserves_source_sku_when_present(tmp_path: Path) -> None:
     assert frame.loc[0, "SKU货号"] == "MY-SKU-001"
 
 
+def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> None:
+    source = tmp_path / "batch.xlsx"
+    pd.DataFrame(
+        [
+            {"商品标题": "Fallback title", "商品链接": "https://www.temu.com/product.html?goods_id=123456789"},
+        ]
+    ).to_excel(source, index=False)
+
+    class FakeProcessor(TemuProcessor):
+        def _run_scraper_enrichment(self, frame):
+            enriched = frame.copy()
+            self._merge_scraped_data(
+                enriched,
+                0,
+                {
+                    "title": "Scraped English Product Title",
+                    "description": "Scraped detailed product description.",
+                    "images": ["https://img.example.com/1.jpg", "https://img.example.com/2.jpg"],
+                    "specs": {"Color": "Blue", "Material": "Polyester"},
+                    "weight_g": 250,
+                    "length_cm": 20,
+                    "width_cm": 10,
+                    "height_cm": 5,
+                    "product_id": "123456789",
+                    "sku": "SCRAPED-SKU",
+                },
+            )
+            return enriched
+
+    config = ProcessingConfig(llm=LLMConfig(api_key=""), enable_scraper=True, deduplicate=False)
+    result = FakeProcessor(config).process_files([source], tmp_path)
+
+    frame = pd.read_excel(result.output_file)
+    assert frame.loc[0, "*英文标题"] == "Scraped English Product Title"
+    assert "Scraped detailed product description." in frame.loc[0, "产品描述"]
+    assert "https://img.example.com/1.jpg" in frame.loc[0, "*轮播图"]
+    assert frame.loc[0, "*变种属性值一"] == "Blue"
+    assert frame.loc[0, "SKU货号"] == "SCRAPED-SKU"
+    assert frame.loc[0, "*重量（g）"] == 250
+
+
 def test_processor_appends_four_unique_images_to_description(tmp_path: Path) -> None:
     source = tmp_path / "batch.xlsx"
     pd.DataFrame(

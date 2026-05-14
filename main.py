@@ -55,6 +55,7 @@ class App(Tk):
         self.title_max_length = IntVar(value=self.config_data.title_max_length)
         self.filter_clothing = BooleanVar(value=self.config_data.filter_clothing)
         self.deduplicate = BooleanVar(value=self.config_data.deduplicate)
+        self.enable_scraper = BooleanVar(value=self.config_data.enable_scraper)
         self.download_images = BooleanVar(value=self.config_data.download_images)
         self.image_tune_count = IntVar(value=self.config_data.image_tune_count)
         self.dedupe_field = StringVar(value=self.config_data.dedupe_field)
@@ -146,6 +147,7 @@ class App(Tk):
         ttk.Checkbutton(config_frame, text="白底增强", variable=self.enhance_white_bg).grid(row=1, column=3, sticky="w", pady=6)
         ttk.Label(config_frame, text="去重字段").grid(row=1, column=4, sticky="e")
         ttk.Combobox(config_frame, textvariable=self.dedupe_field, values=["title", "sku"], width=8, state="readonly").grid(row=1, column=5, sticky="w")
+        ttk.Checkbutton(config_frame, text="启用商品详情爬虫补全（推荐）", variable=self.enable_scraper).grid(row=2, column=0, columnspan=3, sticky="w", pady=6)
 
         self.process_progress = ttk.Progressbar(parent, mode="determinate")
         self.process_progress.pack(fill="x", pady=8)
@@ -343,6 +345,7 @@ class App(Tk):
             title_max_length=int(self.title_max_length.get()),
             filter_clothing=bool(self.filter_clothing.get()),
             deduplicate=bool(self.deduplicate.get()),
+            enable_scraper=bool(self.enable_scraper.get()),
             download_images=bool(self.download_images.get()),
             image_tune_count=int(self.image_tune_count.get()),
             image_tune_prompt=image_tune_prompt or DEFAULT_IMAGE_TUNE_PROMPT,
