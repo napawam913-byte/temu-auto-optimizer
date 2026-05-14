@@ -78,8 +78,9 @@ def test_processor_uses_listing_friendly_variant_value_when_source_has_no_varian
     result = TemuProcessor(config).process_files([source], tmp_path)
 
     frame = pd.read_excel(result.output_file)
-    assert frame.loc[0, "*变种属性名称一"] == "颜色"
-    assert frame.loc[0, "*变种属性值一"] == "如图"
+    assert frame.loc[0, "*变种属性名称一"] == "数量"
+    assert frame.loc[0, "*变种属性值一"] == "1pc"
+    assert frame.loc[0, "*申报价格\n(店铺币种)"] == 200
     assert isna(frame.loc[0, "SKU货号"])
     assert isna(frame.loc[0, "产品货号"])
 
@@ -96,7 +97,8 @@ def test_processor_prefers_source_variant_value_when_present(tmp_path: Path) -> 
     result = TemuProcessor(config).process_files([source], tmp_path)
 
     frame = pd.read_excel(result.output_file)
-    assert frame.loc[0, "*变种属性值一"] == "粉色"
+    assert frame.loc[0, "*变种属性名称一"] == "数量"
+    assert frame.loc[0, "*变种属性值一"] == "1pc"
 
 
 def test_processor_leaves_product_and_sku_codes_empty_when_source_sku_is_present(tmp_path: Path) -> None:
@@ -160,8 +162,8 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
     assert "Scraped detailed product description." not in frame.loc[0, "产品描述"]
     assert frame.loc[0, "产品描述"].count("<img src=") == 2
     assert "https://img.example.com/1.jpg" in frame.loc[0, "*轮播图"]
-    assert frame.loc[0, "*变种属性名称一"] == "颜色"
-    assert frame.loc[0, "*变种属性值一"] == "Blue"
+    assert frame.loc[0, "*变种属性名称一"] == "数量"
+    assert frame.loc[0, "*变种属性值一"] == "1pc"
     assert frame.loc[0, "变种属性名称二"] == "尺寸"
     assert frame.loc[0, "变种属性值二"] == "Queen"
     assert isna(frame.loc[0, "SKU货号"])

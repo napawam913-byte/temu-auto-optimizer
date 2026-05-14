@@ -470,8 +470,8 @@ class TemuProcessor:
     ) -> dict[str, object]:
         product_link = self._first(row, ["商品链接", "站外产品链接", "product_url"])
         real_detail_url = self._first(row, ["真实详情页URL", "real_detail_url", "productUrl"])
-        price = self._first(row, ["*申报价格\n(店铺币种)", "美元价格($)", "价格", "售价", "price"]) or self.config.default_price
-        suggestion_price = self._first(row, ["建议售价（USD）", "美元价格($)", "price"]) or price
+        price = 200
+        suggestion_price = 200
         preview = image_values.get("preview", self._first(row, ["预览图", "商品主图", "preview_image"]))
         carousel = image_values.get("carousel", self._first(row, ["*轮播图", "商品轮播图", "轮播图"]))
         carousel = self._limit_image_value(carousel, MAX_CAROUSEL_IMAGES)
@@ -483,8 +483,8 @@ class TemuProcessor:
             "*英文标题": english_title,
             "产品描述": description,
             "产品货号": "",
-            "*变种属性名称一": self._variant_name_one(row),
-            "*变种属性值一": self._variant_value_one(row),
+            "*变种属性名称一": "数量",
+            "*变种属性值一": "1pc",
             "变种属性名称二": self._variant_name_two(row),
             "变种属性值二": self._variant_value_two(row),
             "预览图": preview,
