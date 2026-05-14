@@ -123,7 +123,7 @@ class TemuUrlConverter:
 
         search_input = page.locator(
             "input[type='search'], input[placeholder*='Search'], input[aria-label*='Search'], input[type='text']"
-        ).first()
+        ).first
         try:
             await search_input.fill(keyword, timeout=6000)
             await page.wait_for_timeout(random.randint(300, 800))
@@ -223,7 +223,7 @@ async def click_first_product_card(page) -> bool:
     ]
     for selector in selectors:
         try:
-            locator = page.locator(selector).first()
+            locator = page.locator(selector).first
             if await locator.count():
                 await locator.click(timeout=5000)
                 return True
