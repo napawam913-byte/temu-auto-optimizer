@@ -112,10 +112,10 @@ class TemuScraper:
                     )
                     page = await context.new_page()
                     await _apply_stealth(page)
-                    await page.goto(url, wait_until="domcontentloaded", timeout=self.config.timeout_ms)
+                    actual_url = await self._open_product_page(page, url)
                     await page.wait_for_timeout(int(random.uniform(1200, 2600)))
                     await _soft_scroll(page)
-                    data = await self._extract_page_data(page, url)
+                    data = await self._extract_page_data(page, actual_url)
                     await context.close()
                     await asyncio.sleep(random.uniform(self.config.min_delay_seconds, self.config.max_delay_seconds))
                     return data
@@ -129,6 +129,76 @@ class TemuScraper:
                         pass
                     await asyncio.sleep(min(8, 1.5 * (attempt + 1)))
             return {"ok": False, "url": url, "error": last_error}
+
+    async def _open_product_page(self, page, url: str) -> str:
+        search_key = _search_key_from_url(url)
+        if search_key and _is_search_like_url(url):
+            self.log(f"Temu search link detected, searching in site: {search_key}")
+            return await self._open_product_via_site_search(page, search_key)
+
+        await page.goto(url, wait_until="domcontentloaded", timeout=self.config.timeout_ms)
+        if search_key and _is_search_like_url(page.url):
+            self.log(f"Temu stayed on search page, retrying with in-site search: {search_key}")
+            return await self._open_product_via_site_search(page, search_key)
+        return page.url
+
+    async def _open_product_via_site_search(self, page, keyword: str) -> str:
+        await page.goto("https://www.temu.com/", wait_until="domcontentloaded", timeout=self.config.timeout_ms)
+        await page.wait_for_timeout(random.randint(1500, 2800))
+
+        search_input = page.locator(
+            "input[type='search'], input[placeholder*='Search'], input[aria-label*='Search'], input[type='text']"
+        ).first()
+        try:
+            await search_input.fill(keyword, timeout=5000)
+            await page.wait_for_timeout(random.randint(300, 800))
+            await search_input.press("Enter")
+        except Exception:
+            await page.evaluate(
+                """(keyword) => {
+                    const inputs = Array.from(document.querySelectorAll('input'));
+                    const input = inputs.find((el) => {
+                        const label = [
+                            el.type,
+                            el.placeholder,
+                            el.getAttribute('aria-label'),
+                            el.getAttribute('name')
+                        ].join(' ').toLowerCase();
+                        return !el.disabled && (label.includes('search') || el.type === 'text' || el.type === 'search');
+                    }) || inputs.find((el) => !el.disabled);
+                    if (!input) return false;
+                    input.focus();
+                    input.value = keyword;
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+                    return true;
+                }""",
+                keyword,
+            )
+            await page.keyboard.press("Enter")
+
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=self.config.timeout_ms)
+        except Exception:
+            pass
+        await page.wait_for_timeout(random.randint(3500, 5500))
+
+        detail_url = await _first_product_detail_url(page)
+        if detail_url:
+            await page.goto(detail_url, wait_until="domcontentloaded", timeout=self.config.timeout_ms)
+            await page.wait_for_timeout(random.randint(1500, 2600))
+            return page.url
+
+        clicked = await _click_first_product_card(page)
+        if clicked:
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=self.config.timeout_ms)
+            except Exception:
+                pass
+            await page.wait_for_timeout(random.randint(1500, 2600))
+            return page.url
+
+        raise RuntimeError(f"No product card found after Temu in-site search: {keyword}")
 
     async def _extract_page_data(self, page, url: str) -> dict[str, Any]:
         payload = await page.evaluate(
@@ -210,6 +280,64 @@ async def _soft_scroll(page) -> None:
     for _ in range(3):
         await page.mouse.wheel(0, random.randint(500, 900))
         await page.wait_for_timeout(random.randint(500, 1000))
+
+
+async def _first_product_detail_url(page) -> str:
+    return await page.evaluate(
+        """() => {
+            const detailPattern = /(-g-\\d+|goods[_-]?id=\\d+|product[_-]?id=\\d+)/i;
+            const badPattern = /(search_result|cart|login|support|orders|category|about|privacy)/i;
+            const anchors = Array.from(document.querySelectorAll('a[href]'));
+            for (const anchor of anchors) {
+                const href = new URL(anchor.getAttribute('href'), location.href).href;
+                const text = (anchor.innerText || anchor.getAttribute('aria-label') || '').trim();
+                const imageCount = anchor.querySelectorAll('img').length;
+                if (detailPattern.test(href) && !badPattern.test(href) && (imageCount || text.length > 5)) {
+                    return href;
+                }
+            }
+            return '';
+        }"""
+    )
+
+
+async def _click_first_product_card(page) -> bool:
+    selectors = [
+        "a[href*='-g-']",
+        "a[href*='goods_id']",
+        "a[href*='goodsId']",
+        "a[href*='product_id']",
+        "a:has(img)",
+        "[role='listitem']",
+        "[class*='goods']",
+        "[class*='product']",
+    ]
+    for selector in selectors:
+        try:
+            locator = page.locator(selector).first()
+            if await locator.count():
+                await locator.click(timeout=5000)
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _is_search_like_url(url: str) -> bool:
+    parsed = urlparse(str(url or ""))
+    text = f"{parsed.path}?{parsed.query}".lower()
+    return "search" in text or "search_key" in text or "keyword" in text
+
+
+def _search_key_from_url(url: str) -> str:
+    parsed = urlparse(str(url or ""))
+    query = parse_qs(parsed.query)
+    for key in ("search_key", "searchKey", "keyword", "q", "query", "goods_id", "goodsId", "product_id", "productId"):
+        values = query.get(key)
+        if values and str(values[0]).strip():
+            return str(values[0]).strip()
+    match = re.search(r"(\d{8,})", str(url or ""))
+    return match.group(1) if match else ""
 
 
 def _normalise_images(images: list[str], max_images: int) -> list[str]:
