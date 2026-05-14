@@ -161,7 +161,9 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
     frame = pd.read_excel(result.output_file)
     assert frame.loc[0, "*英文标题"] == "Scraped English Product Title"
     assert "Scraped detailed product description." not in frame.loc[0, "产品描述"]
-    assert frame.loc[0, "产品描述"].count("<img src=") == 2
+    description_urls = str(frame.loc[0, "产品描述"]).splitlines()
+    assert len(description_urls) == 2
+    assert description_urls[0] == "https://img.example.com/1.jpg"
     assert "https://img.example.com/1.jpg" in frame.loc[0, "*轮播图"]
     assert frame.loc[0, "*变种属性名称一"] == "数量"
     assert frame.loc[0, "*变种属性值一"] == "1pc"
@@ -201,7 +203,8 @@ def test_processor_appends_four_unique_images_to_description(tmp_path: Path) -> 
 
     frame = pd.read_excel(result.output_file)
     description = frame.loc[0, "产品描述"]
-    assert description.count("<img src=") == 4
+    description_urls = str(description).splitlines()
+    assert len(description_urls) == 4
     assert "https://img.example.com/main.jpg" in description
     assert "https://img.example.com/3.jpg" in description
     assert "https://img.example.com/4.jpg" not in description
@@ -228,7 +231,7 @@ def test_processor_limits_carousel_to_ten_images(tmp_path: Path) -> None:
     assert len([item for item in str(carousel).splitlines() if item.strip()]) == 10
     assert "https://img.example.com/9.jpg" in carousel
     assert "https://img.example.com/10.jpg" not in carousel
-    assert description.count("<img src=") == 10
+    assert len([item for item in str(description).splitlines() if item.strip()]) == 10
 
 
 def test_read_source_table_handles_cloud_export_with_csv_extension() -> None:

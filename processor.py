@@ -9,7 +9,6 @@ import time
 import zipfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from html import escape
 from io import BytesIO
 from pathlib import Path
 from typing import Callable, Iterable, Optional
@@ -524,7 +523,7 @@ class TemuProcessor:
         if not urls:
             return ""
 
-        return "\n".join(f'<p><img src="{escape(url, quote=True)}" /></p>' for url in urls)
+        return "\n".join(urls)
 
     def _description_image_urls(self, image_values: dict[str, str]) -> list[str]:
         count = max(0, int(self.config.description_image_count or 0))
