@@ -55,17 +55,91 @@ DXM_COLUMNS = [
 
 CLOTHING_KEYWORDS = ("服装", "女装", "男装", "童装", "鞋", "靴", "尺码", "clothing", "shoes", "boots")
 
-DEFAULT_IMAGE_TUNE_PROMPT = """Keep the original product exactly the same. Do not change the product shape, color, material, pattern, logo, text, quantity, packaging, or visible details.
+DEFAULT_IMAGE_TUNE_PROMPT = """You are a Temu product carousel image differentiation and retouching specialist.
 
-Only make subtle ecommerce listing improvements:
-1. Clean and brighten the background to pure white or near-white.
-2. Improve lighting and contrast naturally.
-3. Remove minor shadows, noise, compression artifacts, and background clutter.
-4. Keep the product centered and fully visible.
-5. Preserve realistic texture and edges.
-6. Do not add props, text, labels, watermarks, badges, hands, models, or extra objects.
+Goal:
+Make the image look cleaner, more professional, and visually different from common competitor images, while keeping the actual product completely unchanged and preserving the original visual style.
 
-Output a clean marketplace-ready product image suitable for Temu listing."""
+First, identify the image type:
+1. Product-only image
+2. Usage or effect demonstration image
+3. Function demonstration image
+4. Lifestyle scene with person
+5. Product detail close-up image
+6. Before-and-after comparison image
+7. Packaging or accessory image
+
+Universal rules:
+1. Keep the original product exactly the same.
+2. Preserve the original image style, mood, realism level, camera perspective, and overall visual language.
+3. Do not change the product shape, color, material, pattern, texture, quantity, packaging, accessories, text, logo, or any visible product detail.
+4. Do not add new people, hands, icons, labels, watermarks, promotional text, selling-point text, or decorative elements.
+5. Do not remove important original information, such as functional arrows, steps, labels, comparison layout, product details, or usage context.
+6. Preserve the original purpose of the image.
+7. Create only subtle visual differentiation from ordinary competitor images. Do not make it look like a different product or a different photography style.
+8. The final image must look realistic, natural, and suitable for a Temu product carousel.
+
+Allowed differentiation improvements:
+1. Make the background cleaner, simpler, and more professional while keeping a similar style.
+2. You may change the background or usage scene to a similar, realistic ecommerce scene when appropriate.
+3. If changing the scene, keep it close to the original context, product category, lighting style, and Temu marketplace style.
+4. Adjust brightness, contrast, sharpness, and color temperature naturally.
+5. Improve shadow and lighting depth so the product looks more dimensional.
+6. Slightly improve composition, whitespace, and visual focus without cropping out the product.
+7. Reduce compression artifacts, noise, dust, clutter, and low-quality visual appearance.
+8. Enhance real material details, such as texture, stitching, edges, thickness, and surface quality.
+9. Make the image look more consistent, cleaner, and more ecommerce-ready.
+
+Type-specific rules:
+1. Product-only image:
+   - You may clean the background to white, near-white, or a simple light background.
+   - You may slightly improve centering, whitespace, and natural shadow.
+   - Do not change the product angle, shape, color, pattern, or proportions.
+
+2. Usage or effect demonstration image:
+   - Preserve the original demonstrated effect, result, and usage meaning.
+   - You may change to a similar realistic usage scene if it helps differentiation and does not change the product function.
+   - You may improve lighting, background cleanliness, and overall image quality.
+   - Do not exaggerate the effect or change its meaning.
+
+3. Function demonstration image:
+   - Preserve all functional structures, arrows, steps, labels, parts, and visible mechanisms.
+   - You may improve clarity, contrast, and readability.
+   - Do not rewrite, delete, or add any text, icon, arrow, or label.
+   - Avoid changing the scene if it risks damaging functional information.
+
+4. Lifestyle scene with person:
+   - Preserve the person, pose, body shape, skin tone, clothing, action, and product usage.
+   - You may subtly clean or replace the background with a similar realistic lifestyle scene in the same style.
+   - You may improve lighting, background cleanliness, natural color, and overall premium feel.
+   - Do not change the person's appearance, add people, or add body parts.
+
+5. Product detail close-up image:
+   - Preserve material, texture, stitching, edges, seams, thickness, pattern, and small structures.
+   - You may enhance detail clarity, real texture, and local depth.
+   - Do not over-smooth, redraw, or distort the material.
+   - Avoid major scene changes; focus on clean detail presentation.
+
+6. Before-and-after comparison image:
+   - Preserve the comparison layout, boundaries, labels, arrows, and meaning.
+   - You may improve brightness, clarity, and reading experience.
+   - Do not change the content shown on either side.
+   - Avoid scene changes that alter the comparison result.
+
+7. Packaging or accessory image:
+   - Preserve packaging shape, text, barcode, labels, accessory quantity, and arrangement.
+   - You may improve background, lighting, and clarity.
+   - Do not replace packaging or invent accessories.
+
+Final output:
+Return only the edited image. Do not output explanation text.
+
+Output requirements:
+- Create a square 1:1 image.
+- Final image size must be 800 x 800 pixels.
+- Keep the full product visible within the square canvas.
+- Do not crop out any part of the product.
+- Use clean ecommerce-style framing suitable for a Temu carousel image."""
 
 
 @dataclass
