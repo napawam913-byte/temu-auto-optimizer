@@ -51,8 +51,6 @@ DXM_COLUMNS = [
     "建议售价（USD）",
     "库存",
     "发货时效（天）",
-    "是否无属性",
-    "变体数量",
 ]
 
 CLOTHING_KEYWORDS = ("服装", "女装", "男装", "童装", "鞋", "靴", "尺码", "clothing", "shoes", "boots")
@@ -440,12 +438,6 @@ class TemuProcessor:
                 for column_index, header in enumerate(headers, start=1):
                     if header:
                         worksheet.cell(excel_row, column_index).value = item.get(str(header), "")
-            for extra_header in ("是否无属性", "变体数量"):
-                if extra_header not in headers:
-                    column_index = worksheet.max_column + 1
-                    worksheet.cell(1, column_index).value = extra_header
-                    for excel_row, item in enumerate(rows, start=2):
-                        worksheet.cell(excel_row, column_index).value = item.get(extra_header, "")
             workbook.save(output_file)
             return
 
@@ -495,8 +487,6 @@ class TemuProcessor:
             "建议售价（USD）": suggestion_price,
             "库存": self._first(row, ["库存", "stock"]) or self.config.default_stock,
             "发货时效（天）": self._first(row, ["发货时效（天）", "发货时效"]) or self.config.default_ship_days,
-            "是否无属性": self._first(row, ["是否无属性", "is_no_attribute"]) or "未知",
-            "变体数量": self._first(row, ["变体数量", "variant_count"]) or "",
         }
 
     def _append_description_images(self, description: str, image_values: dict[str, str]) -> str:
@@ -635,13 +625,6 @@ class TemuProcessor:
         if specs:
             self._set_value(frame, row_index, "爬虫规格参数", specs_to_json(specs))
             self._fill_variant_from_specs(frame, row_index, specs)
-        if "is_no_attribute" in data:
-            self._set_value(frame, row_index, "是否无属性", "是" if data.get("is_no_attribute") else "否")
-        if data.get("variant_count") is not None:
-            self._set_value(frame, row_index, "变体数量", data.get("variant_count"))
-        detected_attributes = data.get("detected_attributes")
-        if detected_attributes:
-            self._set_value(frame, row_index, "检测到的变种属性", ", ".join(str(value) for value in detected_attributes))
 
         self._fill_if_empty(frame, row_index, "商品ID", str(data.get("product_id") or ""))
         self._fill_if_empty(frame, row_index, "SKU", str(data.get("sku") or ""))
