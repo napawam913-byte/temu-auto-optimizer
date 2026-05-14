@@ -198,6 +198,30 @@ def test_processor_appends_four_unique_images_to_description(tmp_path: Path) -> 
     assert "https://img.example.com/4.jpg" not in description
 
 
+def test_processor_limits_carousel_to_ten_images(tmp_path: Path) -> None:
+    source = tmp_path / "batch.xlsx"
+    carousel_urls = [f"https://img.example.com/{index}.jpg" for index in range(12)]
+    pd.DataFrame(
+        [
+            {
+                "商品标题": "Large carousel item",
+                "商品轮播图": "\n".join(carousel_urls),
+            },
+        ]
+    ).to_excel(source, index=False)
+    config = ProcessingConfig(llm=LLMConfig(api_key=""), deduplicate=False, description_image_count=12)
+
+    result = TemuProcessor(config).process_files([source], tmp_path)
+
+    frame = pd.read_excel(result.output_file)
+    carousel = frame.loc[0, "*轮播图"]
+    description = frame.loc[0, "产品描述"]
+    assert len([item for item in str(carousel).splitlines() if item.strip()]) == 10
+    assert "https://img.example.com/9.jpg" in carousel
+    assert "https://img.example.com/10.jpg" not in carousel
+    assert description.count("<img src=") == 10
+
+
 def test_read_source_table_handles_cloud_export_with_csv_extension() -> None:
     source = Path(r"D:\Downloads\2054441176885702657.csv")
     if not source.exists():

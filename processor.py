@@ -54,6 +54,7 @@ DXM_COLUMNS = [
 ]
 
 CLOTHING_KEYWORDS = ("服装", "女装", "男装", "童装", "鞋", "靴", "尺码", "clothing", "shoes", "boots")
+MAX_CAROUSEL_IMAGES = 10
 
 DEFAULT_IMAGE_TUNE_PROMPT = """你是一位 Temu 商品轮播图差异化与修图专家。
 
@@ -457,6 +458,7 @@ class TemuProcessor:
         suggestion_price = self._first(row, ["建议售价（USD）", "美元价格($)", "price"]) or price
         preview = image_values.get("preview", self._first(row, ["预览图", "商品主图", "preview_image"]))
         carousel = image_values.get("carousel", self._first(row, ["*轮播图", "商品轮播图", "轮播图"]))
+        carousel = self._limit_image_value(carousel, MAX_CAROUSEL_IMAGES)
         material = image_values.get("materials", self._first(row, ["*产品素材图", "商品主图", "素材图", "主图"]))
         package_image = image_values.get("package", self._first(row, ["外包装图片", "包装图"]))
 
@@ -524,6 +526,8 @@ class TemuProcessor:
         result: dict[str, str] = {}
         for key, value in image_sources.items():
             urls = self._split_image_values(value)
+            if key == "carousel":
+                urls = urls[:MAX_CAROUSEL_IMAGES]
             if not self.config.download_images:
                 if urls:
                     result[key] = "\n".join(urls)
@@ -775,6 +779,12 @@ class TemuProcessor:
             return []
         text = str(value).strip().strip("[]")
         return [part.strip().strip("'\"") for part in re.split(r"[;,\n]", text) if part.strip()]
+
+    def _limit_image_value(self, value: str, limit: int) -> str:
+        urls = self._split_image_values(value)
+        if not urls:
+            return ""
+        return "\n".join(urls[: max(0, limit)])
 
     @staticmethod
     def _is_clothing(title: str, category: str) -> bool:
