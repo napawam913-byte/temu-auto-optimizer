@@ -37,6 +37,65 @@ Rules:
 LogCallback = Callable[[str], None]
 
 
+VARIANT_AREA_SELECTORS = [
+    "[data-testid*='sku']",
+    "[data-testid*='variant']",
+    "[data-testid*='spec']",
+    "[class*='sku']",
+    "[class*='Sku']",
+    "[class*='variant']",
+    "[class*='Variant']",
+    "[class*='spec']",
+    "[class*='Spec']",
+    "[class*='goods-property']",
+    "[class*='goodsProperty']",
+    "[class*='property']",
+    "[class*='Property']",
+]
+
+VARIANT_BUTTON_SELECTORS = [
+    "button",
+    "[role='button']",
+    "[aria-pressed]",
+    "[aria-selected]",
+    "[class*='sku'] button",
+    "[class*='Sku'] button",
+    "[class*='variant'] button",
+    "[class*='Variant'] button",
+    "[class*='spec'] button",
+    "[class*='Spec'] button",
+    "[class*='property'] button",
+    "[class*='Property'] button",
+    "[class*='sku'] [role='button']",
+    "[class*='variant'] [role='button']",
+    "[class*='spec'] [role='button']",
+    "[class*='property'] [role='button']",
+]
+
+ATTRIBUTE_KEYWORDS = [
+    "color",
+    "colour",
+    "size",
+    "style",
+    "type",
+    "material",
+    "pattern",
+    "capacity",
+    "quantity",
+    "颜色",
+    "色",
+    "尺寸",
+    "尺码",
+    "规格",
+    "款式",
+    "型号",
+    "材质",
+    "图案",
+    "容量",
+    "数量",
+]
+
+
 @dataclass(frozen=True)
 class ScraperConfig:
     max_concurrent: int = 3
@@ -113,9 +172,11 @@ class TemuScraper:
                     page = await context.new_page()
                     await _apply_stealth(page)
                     actual_url = await self._open_product_page(page, url)
+                    attribute_info = await is_no_attribute_product(page)
                     await page.wait_for_timeout(int(random.uniform(1200, 2600)))
                     await _soft_scroll(page)
                     data = await self._extract_page_data(page, actual_url)
+                    data.update(attribute_info)
                     await context.close()
                     await asyncio.sleep(random.uniform(self.config.min_delay_seconds, self.config.max_delay_seconds))
                     return data
@@ -274,6 +335,142 @@ async def _apply_stealth(page) -> None:
             )
         except Exception:
             pass
+
+
+async def is_no_attribute_product(page, timeout_ms: int = 8000) -> dict[str, Any]:
+    """判断 Temu 详情页是否为无属性/单规格商品。
+
+    返回 True 代表适合批量上品。遇到异常时保守返回 False，避免误把多规格商品当成单规格商品。
+    """
+
+    try:
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
+        except Exception:
+            pass
+        await page.wait_for_selector("body", timeout=timeout_ms)
+        try:
+            await page.wait_for_selector("h1, img, [class*='sku'], [class*='Sku'], [class*='variant'], [class*='Variant']", timeout=timeout_ms)
+        except Exception:
+            pass
+
+        return await page.evaluate(
+            """({areaSelectors, buttonSelectors, keywords}) => {
+                const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+                const lower = (value) => normalize(value).toLowerCase();
+                const visible = (el) => {
+                    if (!el) return false;
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 3 && rect.height > 3;
+                };
+                const hasKeyword = (value) => {
+                    const text = lower(value);
+                    return keywords.some((keyword) => text.includes(String(keyword).toLowerCase()));
+                };
+                const labelOf = (el) => normalize([
+                    el.innerText,
+                    el.textContent,
+                    el.getAttribute('aria-label'),
+                    el.getAttribute('title'),
+                    el.getAttribute('data-testid'),
+                    el.className
+                ].join(' '));
+                const ancestorText = (el) => {
+                    let current = el;
+                    const chunks = [];
+                    for (let i = 0; i < 4 && current; i += 1) {
+                        chunks.push(labelOf(current));
+                        current = current.parentElement;
+                    }
+                    return normalize(chunks.join(' '));
+                };
+                const attributeNames = new Set();
+                const variantAreas = [];
+                for (const selector of areaSelectors) {
+                    for (const el of document.querySelectorAll(selector)) {
+                        if (!visible(el)) continue;
+                        const text = ancestorText(el);
+                        if (hasKeyword(text)) {
+                            variantAreas.push(el);
+                            for (const keyword of keywords) {
+                                if (text.toLowerCase().includes(String(keyword).toLowerCase())) {
+                                    attributeNames.add(keyword);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                const buttons = [];
+                for (const selector of buttonSelectors) {
+                    for (const el of document.querySelectorAll(selector)) {
+                        if (!visible(el)) continue;
+                        const text = ancestorText(el);
+                        if (!hasKeyword(text)) continue;
+                        const own = labelOf(el);
+                        if (/add to cart|buy now|checkout|share|favorite|review|shipping|coupon|加入|购买|购物车|收藏|分享/.test(own.toLowerCase())) {
+                            continue;
+                        }
+                        buttons.push(el);
+                    }
+                }
+
+                const uniqueButtonLabels = Array.from(new Set(buttons.map((el) => labelOf(el)).filter(Boolean)));
+                const scriptText = Array.from(document.querySelectorAll('script'))
+                    .map((script) => script.textContent || '')
+                    .join('\\n')
+                    .slice(0, 800000);
+                const bodyText = document.body ? normalize(document.body.innerText) : '';
+                const combined = `${scriptText}\\n${bodyText}`;
+                const counts = [];
+                const patterns = [
+                    /"skuList"\\s*:\\s*\\[([\\s\\S]*?)\\]/ig,
+                    /"skcList"\\s*:\\s*\\[([\\s\\S]*?)\\]/ig,
+                    /"skuOptions"\\s*:\\s*\\[([\\s\\S]*?)\\]/ig,
+                    /"variants?"\\s*:\\s*\\[([\\s\\S]*?)\\]/ig,
+                    /"specs?"\\s*:\\s*\\[([\\s\\S]*?)\\]/ig
+                ];
+                for (const pattern of patterns) {
+                    for (const match of combined.matchAll(pattern)) {
+                        const segment = match[1] || '';
+                        const objectCount = (segment.match(/\\{[^{}]*\\}/g) || []).length;
+                        const valueCount = (segment.match(/"[^"]+"\\s*:/g) || []).length;
+                        if (objectCount > 0) counts.push(objectCount);
+                        else if (valueCount > 0) counts.push(valueCount);
+                    }
+                }
+                const jsonVariantCount = counts.length ? Math.max(...counts) : 0;
+                const clickableVariantCount = uniqueButtonLabels.length;
+                const variantAreaCount = variantAreas.length;
+                const variantCount = Math.max(jsonVariantCount, clickableVariantCount, variantAreaCount ? 1 : 0, 1);
+                const detectedAttributes = Array.from(attributeNames).filter((value) => {
+                    const text = String(value).toLowerCase();
+                    return ['color','colour','size','style','type','material','pattern','capacity','quantity','颜色','色','尺寸','尺码','规格','款式','型号','材质','图案','容量','数量'].includes(text);
+                });
+                const hasMultiSpecButtons = clickableVariantCount > 1;
+                const hasMultiVariantData = jsonVariantCount > 1;
+                const hasVariantArea = variantAreaCount > 0;
+                const isNoAttribute = !hasVariantArea && !hasMultiSpecButtons && !hasMultiVariantData && variantCount <= 1;
+                return {
+                    is_no_attribute: Boolean(isNoAttribute),
+                    variant_count: Number(variantCount || 1),
+                    detected_attributes: detectedAttributes
+                };
+            }""",
+            {
+                "areaSelectors": VARIANT_AREA_SELECTORS,
+                "buttonSelectors": VARIANT_BUTTON_SELECTORS,
+                "keywords": ATTRIBUTE_KEYWORDS,
+            },
+        )
+    except Exception as exc:
+        return {
+            "is_no_attribute": False,
+            "variant_count": 0,
+            "detected_attributes": [],
+            "attribute_detection_error": str(exc),
+        }
 
 
 async def _soft_scroll(page) -> None:

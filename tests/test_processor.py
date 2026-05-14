@@ -140,6 +140,9 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
                     "height_cm": 5,
                     "product_id": "123456789",
                     "sku": "SCRAPED-SKU",
+                    "is_no_attribute": True,
+                    "variant_count": 1,
+                    "detected_attributes": [],
                 },
             )
             return enriched
@@ -159,6 +162,8 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
     assert isna(frame.loc[0, "SKU货号"])
     assert isna(frame.loc[0, "产品货号"])
     assert frame.loc[0, "*重量（g）"] == 250
+    assert frame.loc[0, "是否无属性"] == "是"
+    assert frame.loc[0, "变体数量"] == 1
 
 
 def test_processor_appends_four_unique_images_to_description(tmp_path: Path) -> None:
