@@ -622,7 +622,10 @@ def _update_carousel_cell(excel_file: Path, row_index: int, value: str) -> None:
     except ValueError:
         raise ImageTuneError("Excel 中没有找到 *轮播图 列")
     worksheet.cell(row_index + 2, column_index).value = value
-    workbook.save(excel_file)
+    try:
+        workbook.save(excel_file)
+    except PermissionError as exc:
+        raise ImageTuneError(f"无法写入结果 Excel，请先关闭正在打开的文件：{excel_file}") from exc
 
 
 def _first(row, names: list[str]) -> str:
