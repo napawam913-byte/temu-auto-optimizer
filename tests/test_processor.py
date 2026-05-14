@@ -15,6 +15,7 @@ def test_split_excel_creates_batches_and_zip(tmp_path: Path) -> None:
 
     assert zip_path.exists()
     assert zip_path.name == "split_files.zip"
+    assert zip_path.parent.name.startswith("split-")
     assert len(list(zip_path.parent.glob("第*.xlsx"))) == 3
 
 

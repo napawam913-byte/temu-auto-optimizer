@@ -242,7 +242,8 @@ def split_excel(
     progress: Optional[ProgressCallback] = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    split_dir = output_dir / f"split_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    now = datetime.now()
+    split_dir = output_dir / f"split-{now.year}-{now.month}-{now.day}-{now.hour}.{now.minute:02d}"
     split_dir.mkdir(parents=True, exist_ok=True)
 
     df = read_source_table(input_file)
