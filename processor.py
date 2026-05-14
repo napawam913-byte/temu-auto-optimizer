@@ -55,91 +55,106 @@ DXM_COLUMNS = [
 
 CLOTHING_KEYWORDS = ("服装", "女装", "男装", "童装", "鞋", "靴", "尺码", "clothing", "shoes", "boots")
 
-DEFAULT_IMAGE_TUNE_PROMPT = """You are a Temu product carousel image differentiation and retouching specialist.
+DEFAULT_IMAGE_TUNE_PROMPT = """你是一位 Temu 商品轮播图差异化与修图专家。
 
-Goal:
-Make the image look cleaner, more professional, and visually different from common competitor images, while keeping the actual product completely unchanged and preserving the original visual style.
+目标：
+在保持原商品完全不变，并保留原图画风的前提下，让图片看起来更干净、更专业，并与普通竞品图片形成一定视觉差异。
 
-First, identify the image type:
-1. Product-only image
-2. Usage or effect demonstration image
-3. Function demonstration image
-4. Lifestyle scene with person
-5. Product detail close-up image
-6. Before-and-after comparison image
-7. Packaging or accessory image
+请先判断当前图片属于哪一种类型：
+1. 纯商品图
+2. 使用效果展示图
+3. 功能展示图
+4. 人物场景图
+5. 商品细节特写图
+6. 前后对比图
+7. 包装或配件图
 
-Universal rules:
-1. Keep the original product exactly the same.
-2. Preserve the original image style, mood, realism level, camera perspective, and overall visual language.
-3. Do not change the product shape, color, material, pattern, texture, quantity, packaging, accessories, text, logo, or any visible product detail.
-4. Do not add new people, hands, icons, labels, watermarks, promotional text, selling-point text, or decorative elements.
-5. Do not remove important original information, such as functional arrows, steps, labels, comparison layout, product details, or usage context.
-6. Preserve the original purpose of the image.
-7. Create only subtle visual differentiation from ordinary competitor images. Do not make it look like a different product or a different photography style.
-8. The final image must look realistic, natural, and suitable for a Temu product carousel.
+通用规则：
+1. 必须保持原商品完全一致。
+2. 保留原图的画风、氛围、真实感、镜头视角和整体视觉语言。
+3. 不要改变商品形状、颜色、材质、图案、纹理、数量、包装、配件、文字、Logo 或任何可见商品细节。
+4. 不要新增人物、手、图标、标签、水印、促销文字、卖点文字或装饰元素。
+5. 不要删除原图中的重要信息，例如功能箭头、步骤、标签、对比结构、商品细节或使用场景。
+6. 保留原图用途。
+7. 只做轻微视觉差异化，不要让图片看起来像另一个商品，也不要变成另一种摄影风格。
+8. 最终图片必须真实、自然，适合 Temu 商品轮播图使用。
 
-Allowed differentiation improvements:
-1. Make the background cleaner, simpler, and more professional while keeping a similar style.
-2. You may change the background or usage scene to a similar, realistic ecommerce scene when appropriate.
-3. If changing the scene, keep it close to the original context, product category, lighting style, and Temu marketplace style.
-4. Adjust brightness, contrast, sharpness, and color temperature naturally.
-5. Improve shadow and lighting depth so the product looks more dimensional.
-6. Slightly improve composition, whitespace, and visual focus without cropping out the product.
-7. Reduce compression artifacts, noise, dust, clutter, and low-quality visual appearance.
-8. Enhance real material details, such as texture, stitching, edges, thickness, and surface quality.
-9. Make the image look more consistent, cleaner, and more ecommerce-ready.
+允许的差异化优化：
+1. 让背景更干净、更简洁、更专业，同时保持相似画风。
+2. 在适合的情况下，可以将背景或使用场景替换为相似的真实电商场景。
+3. 如果更换场景，必须贴近原图语境、商品品类、光线风格和 Temu 平台风格。
+4. 可以适当调整光影方向、明暗层次、阴影柔和度和高光表现，让商品更有立体感。
+5. 可以在不改变商品结构和比例的前提下，轻微调整展示角度，让图片与普通竞品图形成差异。
+6. 可以对画面进行适当放大或缩小，优化商品在 800x800 画布中的占比。
+7. 可以轻微优化构图、留白和视觉重心，但不要裁切商品主体。
+8. 自然调整亮度、对比度、锐度和色温。
+9. 减少压缩痕迹、噪点、灰尘、杂乱背景和廉价感。
+10. 强化真实材质细节，例如纹理、缝线、边缘、厚度和表面质感。
+11. 让图片整体更统一、更干净、更适合电商展示。
 
-Type-specific rules:
-1. Product-only image:
-   - You may clean the background to white, near-white, or a simple light background.
-   - You may slightly improve centering, whitespace, and natural shadow.
-   - Do not change the product angle, shape, color, pattern, or proportions.
+展示角度和缩放限制：
+1. 只允许轻微改变展示角度，不要让商品结构、款式、形状或使用方式发生变化。
+2. 不要生成原图中看不到的新背面、新内部结构、新配件或新功能。
+3. 放大时不得裁切商品任何部分；缩小时商品仍需清晰可见。
+4. 商品在画面中的占比应适合 Temu 轮播图，不能过小，也不能贴边。
+5. 光影变化必须真实自然，不要产生塑料感、过度磨皮感或虚假的棚拍效果。
 
-2. Usage or effect demonstration image:
-   - Preserve the original demonstrated effect, result, and usage meaning.
-   - You may change to a similar realistic usage scene if it helps differentiation and does not change the product function.
-   - You may improve lighting, background cleanliness, and overall image quality.
-   - Do not exaggerate the effect or change its meaning.
+不同图片类型规则：
+1. 纯商品图：
+   - 可以将背景清理为白色、近白色或简单浅色背景。
+   - 可以轻微优化商品居中、留白和自然阴影。
+   - 可以轻微调整展示角度、远近比例和商品在画布中的位置。
+   - 不要改变商品形状、颜色、图案或真实比例。
 
-3. Function demonstration image:
-   - Preserve all functional structures, arrows, steps, labels, parts, and visible mechanisms.
-   - You may improve clarity, contrast, and readability.
-   - Do not rewrite, delete, or add any text, icon, arrow, or label.
-   - Avoid changing the scene if it risks damaging functional information.
+2. 使用效果展示图：
+   - 保留原本展示的效果、结果和使用含义。
+   - 如果有助于差异化，可以替换为相似真实使用场景，但不能改变商品功能。
+   - 可以优化光线、背景干净程度和整体画质。
+   - 可以轻微调整画面远近和构图，让使用效果更清楚。
+   - 不要夸大效果，不要改变效果含义。
 
-4. Lifestyle scene with person:
-   - Preserve the person, pose, body shape, skin tone, clothing, action, and product usage.
-   - You may subtly clean or replace the background with a similar realistic lifestyle scene in the same style.
-   - You may improve lighting, background cleanliness, natural color, and overall premium feel.
-   - Do not change the person's appearance, add people, or add body parts.
+3. 功能展示图：
+   - 保留所有功能结构、箭头、步骤、标签、零件和可见机制。
+   - 可以提升清晰度、对比度和可读性。
+   - 不要改写、删除或新增任何文字、图标、箭头或标签。
+   - 如果更换场景或调整角度可能破坏功能信息，则不要更换场景或角度。
 
-5. Product detail close-up image:
-   - Preserve material, texture, stitching, edges, seams, thickness, pattern, and small structures.
-   - You may enhance detail clarity, real texture, and local depth.
-   - Do not over-smooth, redraw, or distort the material.
-   - Avoid major scene changes; focus on clean detail presentation.
+4. 人物场景图：
+   - 保留人物、姿势、体型、肤色、衣着、动作和商品使用方式。
+   - 可以轻微清理或替换背景为相似真实生活场景，并保持同一画风。
+   - 可以优化光线、背景整洁度、自然色彩和整体高级感。
+   - 可以轻微调整画面远近和视觉重心，但不要改变人物动作或商品使用方式。
+   - 不要改变人物外貌，不要新增人物或肢体。
 
-6. Before-and-after comparison image:
-   - Preserve the comparison layout, boundaries, labels, arrows, and meaning.
-   - You may improve brightness, clarity, and reading experience.
-   - Do not change the content shown on either side.
-   - Avoid scene changes that alter the comparison result.
+5. 商品细节特写图：
+   - 保留材质、纹理、缝线、边缘、接口、厚度、图案和细小结构。
+   - 可以增强细节清晰度、真实纹理和局部层次。
+   - 可以轻微调整局部放大比例，让细节更清楚。
+   - 不要过度磨皮、重绘或扭曲材质。
+   - 避免大幅更换场景，重点放在干净的细节展示上。
 
-7. Packaging or accessory image:
-   - Preserve packaging shape, text, barcode, labels, accessory quantity, and arrangement.
-   - You may improve background, lighting, and clarity.
-   - Do not replace packaging or invent accessories.
+6. 前后对比图：
+   - 保留对比结构、边界线、标签、箭头和对比含义。
+   - 可以优化亮度、清晰度和阅读体验。
+   - 不要改变任一侧展示内容。
+   - 避免改变会影响对比结果的场景、角度或比例。
 
-Final output:
-Return only the edited image. Do not output explanation text.
+7. 包装或配件图：
+   - 保留包装形状、文字、条码、标签、配件数量和摆放方式。
+   - 可以优化背景、光线和清晰度。
+   - 可以轻微调整画面远近，让包装和配件更清楚。
+   - 不要替换包装，不要虚构配件。
 
-Output requirements:
-- Create a square 1:1 image.
-- Final image size must be 800 x 800 pixels.
-- Keep the full product visible within the square canvas.
-- Do not crop out any part of the product.
-- Use clean ecommerce-style framing suitable for a Temu carousel image."""
+最终输出：
+只返回修图后的图片，不要输出解释文字。
+
+输出要求：
+- 生成 1:1 正方形图片。
+- 最终图片尺寸必须为 800 x 800 像素。
+- 商品必须完整显示在正方形画布内。
+- 不要裁切商品任何部分。
+- 商品占比要适中，不能过小，也不能贴边。
+- 使用干净的电商构图，适合 Temu 商品轮播图。"""
 
 
 @dataclass
