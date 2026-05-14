@@ -125,6 +125,8 @@ class TemuUrlConverter:
             "input[type='search'], input[placeholder*='Search'], input[aria-label*='Search'], input[type='text']"
         ).first
         try:
+            await search_input.click(timeout=6000)
+            await page.keyboard.press("Control+A")
             await search_input.fill(keyword, timeout=6000)
             await page.wait_for_timeout(random.randint(300, 800))
             await search_input.press("Enter")
@@ -149,11 +151,15 @@ class TemuUrlConverter:
             )
             await page.keyboard.press("Enter")
 
+        await page.wait_for_timeout(random.randint(800, 1400))
+        if not is_search_like_url(page.url):
+            await click_search_submit(page)
+
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=self.config.timeout_ms)
         except Exception:
             pass
-        await page.wait_for_timeout(random.randint(3000, 5200))
+        await page.wait_for_timeout(random.randint(4500, 7200))
         await soft_scroll(page)
 
         detail_url = await first_product_detail_url(page)
@@ -170,7 +176,8 @@ class TemuUrlConverter:
             if not is_search_like_url(page.url):
                 return canonical_product_url(page.url)
 
-        raise RuntimeError(f"No product card found after Temu in-site search: {keyword}")
+        page_state = await search_debug_state(page)
+        raise RuntimeError(f"No product card found after Temu in-site search: {keyword} | {page_state}")
 
 
 async def apply_stealth(page) -> None:
@@ -186,22 +193,61 @@ async def apply_stealth(page) -> None:
 
 
 async def soft_scroll(page) -> None:
-    for _ in range(2):
+    for _ in range(4):
         await page.mouse.wheel(0, random.randint(450, 850))
         await page.wait_for_timeout(random.randint(450, 900))
+
+
+async def click_search_submit(page) -> bool:
+    selectors = [
+        "button[type='submit']",
+        "button[aria-label*='Search']",
+        "[role='button'][aria-label*='Search']",
+        "button:has(svg)",
+        "[role='button']:has(svg)",
+    ]
+    for selector in selectors:
+        try:
+            locator = page.locator(selector).first
+            if await locator.count():
+                await locator.click(timeout=4000)
+                return True
+        except Exception:
+            continue
+    try:
+        return await page.evaluate(
+            """() => {
+                const candidates = Array.from(document.querySelectorAll('button,[role="button"]'));
+                const button = candidates.find((el) => {
+                    const text = [
+                        el.innerText,
+                        el.getAttribute('aria-label'),
+                        el.getAttribute('title'),
+                        el.className
+                    ].join(' ').toLowerCase();
+                    return text.includes('search') || text.includes('搜索') || el.querySelector('svg');
+                });
+                if (!button) return false;
+                button.click();
+                return true;
+            }"""
+        )
+    except Exception:
+        return False
 
 
 async def first_product_detail_url(page) -> str:
     return await page.evaluate(
         """() => {
-            const detailPattern = /(-g-\\d+|goods[_-]?id=\\d+|product[_-]?id=\\d+)/i;
+            const detailPattern = /(goods\\.html|\\/[^?#]*-g-\\d+|goods[_-]?id=\\d+|product[_-]?id=\\d+)/i;
             const badPattern = /(search_result|cart|login|support|orders|category|about|privacy)/i;
             const anchors = Array.from(document.querySelectorAll('a[href]'));
             for (const anchor of anchors) {
                 const href = new URL(anchor.getAttribute('href'), location.href).href;
                 const text = (anchor.innerText || anchor.getAttribute('aria-label') || '').trim();
                 const imageCount = anchor.querySelectorAll('img').length;
-                if (detailPattern.test(href) && !badPattern.test(href) && (imageCount || text.length > 5)) {
+                const rect = anchor.getBoundingClientRect();
+                if (detailPattern.test(href) && !badPattern.test(href) && (imageCount || text.length > 5 || rect.width > 80)) {
                     return href;
                 }
             }
@@ -230,6 +276,20 @@ async def click_first_product_card(page) -> bool:
         except Exception:
             continue
     return False
+
+
+async def search_debug_state(page) -> str:
+    try:
+        return await page.evaluate(
+            """() => {
+                const text = (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').slice(0, 220);
+                const linkCount = document.querySelectorAll('a[href]').length;
+                const imageCount = document.images.length;
+                return `url=${location.href}; links=${linkCount}; images=${imageCount}; text=${text}`;
+            }"""
+        )
+    except Exception as exc:
+        return f"debug_state_failed={exc}"
 
 
 def is_search_like_url(url: str) -> bool:
