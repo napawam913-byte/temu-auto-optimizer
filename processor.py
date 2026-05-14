@@ -343,11 +343,9 @@ class TemuProcessor:
                     sensitive_words_file=self._sensitive_words_file(),
                 )
                 chinese_title = self.optimizer.translate_title_to_chinese(english_title, source_title, category)
-                source_description = self._first(row, ["产品描述", "商品描述", "详细产品描述", "爬虫产品描述", "description"])
-                description = source_description or self.optimizer.generate_description(source_title, english_title, category)
                 output_sku = self._listing_sku(sku, product_id, english_title, index)
                 image_values = self._process_images(row, image_dir, output_sku or f"item_{index}")
-                description = self._append_description_images(description, image_values)
+                description = self._append_description_images("", image_values)
 
                 output_rows.append(self._build_output_row(row, chinese_title, english_title, description, output_sku, image_values))
             except Exception as exc:
@@ -454,7 +452,6 @@ class TemuProcessor:
         sku: str,
         image_values: dict[str, str],
     ) -> dict[str, object]:
-        product_id = self._first(row, ["商品ID", "产品货号", "product_id"])
         product_link = self._first(row, ["商品链接", "站外产品链接", "product_url"])
         price = self._first(row, ["*申报价格\n(店铺币种)", "美元价格($)", "价格", "售价", "price"]) or self.config.default_price
         suggestion_price = self._first(row, ["建议售价（USD）", "美元价格($)", "price"]) or price
@@ -467,14 +464,14 @@ class TemuProcessor:
             "*产品标题": source_title,
             "*英文标题": english_title,
             "产品描述": description,
-            "产品货号": product_id,
+            "产品货号": "",
             "*变种属性名称一": self._variant_name_one(row),
             "*变种属性值一": self._variant_value_one(row),
-            "变种属性名称二": self._first(row, ["变种属性名称二"]),
-            "变种属性值二": self._first(row, ["变种属性值二"]),
+            "变种属性名称二": self._variant_name_two(row),
+            "变种属性值二": self._variant_value_two(row),
             "预览图": preview,
             "*申报价格\n(店铺币种)": price,
-            "SKU货号": sku or product_id or self._make_sku(english_title),
+            "SKU货号": "",
             "*长（cm）": self._first(row, ["*长（cm）", "长(cm)", "长", "length"]) or self.config.default_length_cm,
             "*宽（cm）": self._first(row, ["*宽（cm）", "宽(cm)", "宽", "width"]) or self.config.default_width_cm,
             "*高（cm）": self._first(row, ["*高（cm）", "高(cm)", "高", "height"]) or self.config.default_height_cm,
@@ -495,13 +492,9 @@ class TemuProcessor:
     def _append_description_images(self, description: str, image_values: dict[str, str]) -> str:
         urls = self._description_image_urls(image_values)
         if not urls:
-            return description
+            return ""
 
-        image_html = "\n".join(f'<p><img src="{escape(url, quote=True)}" /></p>' for url in urls)
-        clean_description = str(description or "").strip()
-        if not clean_description:
-            return image_html
-        return f"{clean_description}\n\n{image_html}"
+        return "\n".join(f'<p><img src="{escape(url, quote=True)}" /></p>' for url in urls)
 
     def _description_image_urls(self, image_values: dict[str, str]) -> list[str]:
         count = max(0, int(self.config.description_image_count or 0))
@@ -510,7 +503,8 @@ class TemuProcessor:
 
         selected: list[str] = []
         seen: set[str] = set()
-        for key in ("preview", "carousel", "materials", "package"):
+        preferred_keys = ("carousel",) if image_values.get("carousel") else ("preview", "materials", "package")
+        for key in preferred_keys:
             for value in self._split_image_values(image_values.get(key, "")):
                 if value in seen:
                     continue
@@ -649,9 +643,13 @@ class TemuProcessor:
             self._fill_if_empty(frame, row_index, "颜色", color)
             self._fill_if_empty(frame, row_index, "变种属性名称一", "颜色")
             self._fill_if_empty(frame, row_index, "变种属性值一", color)
+            if size:
+                self._fill_if_empty(frame, row_index, "尺寸", size)
+                self._fill_if_empty(frame, row_index, "变种属性名称二", "尺寸")
+                self._fill_if_empty(frame, row_index, "变种属性值二", size)
         elif size:
             self._fill_if_empty(frame, row_index, "规格", size)
-            self._fill_if_empty(frame, row_index, "变种属性名称一", "规格")
+            self._fill_if_empty(frame, row_index, "变种属性名称一", "尺寸")
             self._fill_if_empty(frame, row_index, "变种属性值一", size)
         if material:
             self._fill_if_empty(frame, row_index, "材质", material)
@@ -699,11 +697,16 @@ class TemuProcessor:
         return re.sub(r"\s+", " ", str(value or "")).strip().lower()
 
     def _variant_name_one(self, row: dict[str, object]) -> str:
-        return (
-            self._first(row, ["*变种属性名称一", "变种属性名称一", "属性名称一", "规格名称", "规格名", "变体名称", "变种名称"])
-            or self.config.default_variant_name
-            or "颜色"
-        )
+        configured = self._first(row, ["*变种属性名称一", "变种属性名称一", "属性名称一", "规格名称", "规格名", "变体名称", "变种名称"])
+        if configured:
+            return configured
+        if self._color_value(row):
+            return "颜色"
+        if self._size_value(row):
+            return "尺寸"
+        if self._material_value(row):
+            return "材质"
+        return self.config.default_variant_name or "颜色"
 
     def _variant_value_one(self, row: dict[str, object]) -> str:
         value = self._first(
@@ -728,6 +731,35 @@ class TemuProcessor:
         if not configured or configured.lower() == "default":
             return "如图"
         return configured
+
+    def _variant_name_two(self, row: dict[str, object]) -> str:
+        configured = self._first(row, ["变种属性名称二", "属性名称二", "规格名称二", "规格名二", "变体名称二", "变种名称二"])
+        if configured:
+            return configured
+        if self._color_value(row) and self._size_value(row):
+            return "尺寸"
+        if self._color_value(row) and self._material_value(row):
+            return "材质"
+        return ""
+
+    def _variant_value_two(self, row: dict[str, object]) -> str:
+        configured = self._first(row, ["变种属性值二", "属性值二", "规格值二", "变体值二", "变种值二"])
+        if configured:
+            return configured
+        if self._color_value(row) and self._size_value(row):
+            return self._size_value(row)
+        if self._color_value(row) and self._material_value(row):
+            return self._material_value(row)
+        return ""
+
+    def _color_value(self, row: dict[str, object]) -> str:
+        return self._first(row, ["颜色", "颜色分类", "Color", "Colour", "color", "colour"])
+
+    def _size_value(self, row: dict[str, object]) -> str:
+        return self._first(row, ["尺寸", "尺码", "规格", "规格值", "Size", "size"])
+
+    def _material_value(self, row: dict[str, object]) -> str:
+        return self._first(row, ["材质", "面料", "材料", "Material", "material", "fabric", "composition"])
 
     def _listing_sku(self, source_sku: str, product_id: str, english_title: str, row_index: int) -> str:
         if source_sku:

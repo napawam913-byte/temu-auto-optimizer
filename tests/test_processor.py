@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+from pandas import isna
 
 from llm_optimizer import LLMConfig
 from processor import ProcessingConfig, TemuProcessor, read_source_table, split_excel
@@ -79,7 +80,8 @@ def test_processor_uses_listing_friendly_variant_value_when_source_has_no_varian
     frame = pd.read_excel(result.output_file)
     assert frame.loc[0, "*变种属性名称一"] == "颜色"
     assert frame.loc[0, "*变种属性值一"] == "如图"
-    assert frame.loc[0, "SKU货号"] == "TAO-203024-001"
+    assert isna(frame.loc[0, "SKU货号"])
+    assert isna(frame.loc[0, "产品货号"])
 
 
 def test_processor_prefers_source_variant_value_when_present(tmp_path: Path) -> None:
@@ -97,7 +99,7 @@ def test_processor_prefers_source_variant_value_when_present(tmp_path: Path) -> 
     assert frame.loc[0, "*变种属性值一"] == "粉色"
 
 
-def test_processor_preserves_source_sku_when_present(tmp_path: Path) -> None:
+def test_processor_leaves_product_and_sku_codes_empty_when_source_sku_is_present(tmp_path: Path) -> None:
     source = tmp_path / "batch.xlsx"
     pd.DataFrame(
         [
@@ -109,7 +111,8 @@ def test_processor_preserves_source_sku_when_present(tmp_path: Path) -> None:
     result = TemuProcessor(config).process_files([source], tmp_path)
 
     frame = pd.read_excel(result.output_file)
-    assert frame.loc[0, "SKU货号"] == "MY-SKU-001"
+    assert isna(frame.loc[0, "SKU货号"])
+    assert isna(frame.loc[0, "产品货号"])
 
 
 def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> None:
@@ -130,7 +133,7 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
                     "title": "Scraped English Product Title",
                     "description": "Scraped detailed product description.",
                     "images": ["https://img.example.com/1.jpg", "https://img.example.com/2.jpg"],
-                    "specs": {"Color": "Blue", "Material": "Polyester"},
+                    "specs": {"Color": "Blue", "Size": "Queen", "Material": "Polyester"},
                     "weight_g": 250,
                     "length_cm": 20,
                     "width_cm": 10,
@@ -146,10 +149,15 @@ def test_processor_merges_scraped_product_data_before_output(tmp_path: Path) -> 
 
     frame = pd.read_excel(result.output_file)
     assert frame.loc[0, "*英文标题"] == "Scraped English Product Title"
-    assert "Scraped detailed product description." in frame.loc[0, "产品描述"]
+    assert "Scraped detailed product description." not in frame.loc[0, "产品描述"]
+    assert frame.loc[0, "产品描述"].count("<img src=") == 2
     assert "https://img.example.com/1.jpg" in frame.loc[0, "*轮播图"]
+    assert frame.loc[0, "*变种属性名称一"] == "颜色"
     assert frame.loc[0, "*变种属性值一"] == "Blue"
-    assert frame.loc[0, "SKU货号"] == "SCRAPED-SKU"
+    assert frame.loc[0, "变种属性名称二"] == "尺寸"
+    assert frame.loc[0, "变种属性值二"] == "Queen"
+    assert isna(frame.loc[0, "SKU货号"])
+    assert isna(frame.loc[0, "产品货号"])
     assert frame.loc[0, "*重量（g）"] == 250
 
 
